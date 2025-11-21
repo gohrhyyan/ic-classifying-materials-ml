@@ -113,6 +113,7 @@ class DataModule:
 
         Y = self.data.copy()
         Y = self.data[label_col]
+        Y = Y.rename(columns={label_col[0]: "label"})
 
         logging.info(f"Features shape: {X.shape}, Labels shape: {Y.shape}")
         return X, Y
