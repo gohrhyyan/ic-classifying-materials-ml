@@ -208,6 +208,9 @@ __marimo__/
 
 # === ML / Data processing artifacts ===
 
+# Directory for storing all experiment runs
+multirun/
+
 # Directory that contains all fitted preprocessors, encoders, imputers, scalers, etc.
 models/
 
