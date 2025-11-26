@@ -1,7 +1,7 @@
 """
 Split a processed CSV dataset into train/test sets and save them separately.
 
-This module defines the ``DataModule`` class, which loads a pre-processed CSV file
+This module defines the ``DataSplitter`` class, which loads a pre-processed CSV file
 (containing one or more label columns whose names start with ``label_``), separates
 features from labels, performs a stratified train-test split, and saves the resulting
 train and test sets as new CSV files in the ``data/`` directory.
@@ -16,10 +16,11 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+# Define BASE_DIR as the project's root: Go up two parent directories from this script's location
 BASE_DIR = Path(__file__).parent.parent
 
 
-class DataModule:
+class DataSplitter:
     """
     Load a processed dataset, split it into train/test sets, and persist the splits.
 
@@ -77,14 +78,19 @@ class DataModule:
         on the label columns. Finally, the train and test sets are saved via `_save_data`.
         """
 
-        X, Y = self._seperate_features_and_labels()
+        # split the data into features and labels
+        # features, X_features are the inputs to the model later.
+        # labels, Y_labels are what we want to predict using the model.
+        X_features, Y_labels = self._seperate_features_and_labels()
 
         logging.info("Splitting data into training and testing sets.")
-        X_train, X_test, Y_train, Y_test = train_test_split(
-            X, Y, test_size=self.test_size, random_state=self.random_state, stratify=Y
+        # Perform train-test split. Stratification ensures even distiribution of labels.
+        # Straification is based on Y_labels, meaning the test and train sets will have similar proportions of each label class.
+        X_features_train, X_features_test, Y_labels_train, Y_labels_test = train_test_split(
+            X_features, Y_labels, test_size=self.test_size, random_state=self.random_state, stratify=Y_labels
         )
 
-        self._save_data(X_train, X_test, Y_train, Y_test)
+        self._save_data(X_features_train, X_features_test, Y_labels_train, Y_labels_test)
 
     def _seperate_features_and_labels(self) -> tuple[pd.DataFrame, pd.Series]:
         """
@@ -95,35 +101,37 @@ class DataModule:
 
         Returns
         -------
-        X : pd.DataFrame
+        X_features : pd.DataFrame
             DataFrame containing only the feature columns.
-        Y : pd.DataFrame
+        Y_labels : pd.DataFrame
             DataFrame containing only the label columns.
         """
         logging.info("Separating features and labels.")
 
+        # Loop over all columns to identify label columns
         label_col = [col for col in self.data.columns if col.startswith("label_")]
         if not label_col:
             raise KeyError(
                 "No label columns found. Expected columns starting with 'label_'."
             )
 
-        X = self.data.copy()
-        X = self.data.drop(columns=label_col)
+        # Extract feature columns by dropping label columns
+        X_features = self.data.copy()
+        X_features = X_features.drop(columns=label_col)
 
-        Y = self.data.copy()
-        Y = self.data[label_col]
-        Y = Y.rename(columns={label_col[0]: "label"})
+        # Extract label columns, labels are what we want to predict using the model.
+        Y_labels = self.data[label_col].copy()
+        Y_labels = Y_labels.rename(columns={label_col[0]: "label"})
 
-        logging.info(f"Features shape: {X.shape}, Labels shape: {Y.shape}")
-        return X, Y
+        logging.info(f"Features shape: {X_features.shape}, Labels shape: {Y_labels.shape}")
+        return X_features, Y_labels
 
     def _save_data(
         self,
-        X_train: pd.DataFrame,
-        X_test: pd.DataFrame,
-        Y_train: pd.DataFrame,
-        Y_test: pd.DataFrame,
+        X_features_train: pd.DataFrame,
+        X_features_test: pd.DataFrame,
+        Y_labels_train: pd.DataFrame,
+        Y_labels_test: pd.DataFrame,
     ) -> None:
         """
         Concatenate features and labels for train/test sets and save them to CSV.
@@ -133,17 +141,17 @@ class DataModule:
 
         Parameters
         ----------
-        X_train, X_test : pd.DataFrame
+        X_features_train, X_features_test : pd.DataFrame
             Feature matrices for training and testing.
-        Y_train, Y_test : pd.DataFrame
+        Y_labels_train, Y_labels_test : pd.DataFrame
             Label DataFrames for training and testing.
         """
 
         logging.info("Saving split datasets to CSV files.")
 
-        train_df = pd.concat([X_train, Y_train], axis=1)
+        train_df = pd.concat([X_features_train, Y_labels_train], axis=1)
         logging.info("Train data shape: %s", train_df.shape)
-        test_df = pd.concat([X_test, Y_test], axis=1)
+        test_df = pd.concat([X_features_test, Y_labels_test], axis=1)
         logging.info("Test data shape: %s", test_df.shape)
 
         train_path = Path(
@@ -160,6 +168,6 @@ class DataModule:
 
 if __name__ == "__main__":
     logging.info("Starting data splitting process...")
-    data_module = DataModule(data_path=Path(BASE_DIR / "data/dataset_1_processed.csv"))
+    data_module = DataSplitter(data_path=Path(BASE_DIR / "data/dataset_1_processed.csv").resolve()) #magic path being used here
     data_module.split_data()
     logging.info("Data splitting completed successfully.")

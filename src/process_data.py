@@ -248,6 +248,6 @@ class DataProcessor:
 
 if __name__ == "__main__":
     logging.info("Initialising Data Processor.")
-    processor = DataProcessor(data_path=Path("data/dataset_1.csv"))
+    processor = DataProcessor(data_path=Path(BASE_DIR / "data/dataset_1.csv").resolve())
     processor.process_data()
     logging.info("Data processing completed successfully.")
