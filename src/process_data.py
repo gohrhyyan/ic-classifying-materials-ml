@@ -20,6 +20,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder
 
 BASE_DIR = Path(__file__).parent.parent
+
+#TODO: can this logging be configured from outside, and made standard across modules?
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -57,37 +59,39 @@ class DataProcessor:
             Path to the input CSV file.  The file must contain a column named
             ``label`` that will be treated as the target variable.
         """
-        self.base_name = data_path.with_suffix("")  # Store base path for outputs
-        self.dataset_name = data_path.stem  # Extract dataset name from file stem
-        self.data = pd.read_csv(data_path)
+        self.base_name = data_path.with_suffix("")  # Remove file extension to get base path for outputs
+        self.dataset_name = data_path.stem          # Extract dataset name from file stem
+        self.data = pd.read_csv(data_path)          # Load dataset into pandas, automatically creating DataFrame
 
-        # Use Bayesian Ridge regression model as base estimator for MICE
+        #TODO: removie magic numbers
+        # Use Bayesian Ridge regression model as base estimator for MICE (filling in missing values)
         self.imputer = IterativeImputer(
             estimator=BayesianRidge(),  # Robust regression for outlier resistance
-            max_iter=100,  # More iterations for convergence (if needed)
-            tol=1e-12,  # Convergence tolerance
+            max_iter=100,               # More iterations for convergence (if needed)
+            tol=1e-12,                  # Convergence tolerance
             initial_strategy="median",  # Start with simple median fill
             imputation_order="arabic",  # Preserve column order
-            random_state=42,  # Ensure reproducibility
+            random_state=42,            # Ensure reproducibility
             verbose=0,
         )
 
-        self.scaler = StandardScaler()  # Zero mean, unit variance
+        # StandardScaler is a preprocessing tool from scikit-learn that standardizes numeric features by transforming them to have:
+        # Mean = 0
+        # Standard deviation = 1 (unit variance)
+        self.scaler = StandardScaler() 
 
+        # OneHotEncoder to convert categorical labels into binary columns, let the encoder handle unknown categories safely
         self.encoder = OneHotEncoder(
-            categories=[["non-conductive", "conductive"]]
-            if set(self.data["label"].unique()) == {"conductive", "non-conductive"}
-            else "auto",  # Handle known categories if applicable
-            sparse_output=False,  # Return dense array
-            handle_unknown="ignore",  # Safe on unseen categories
-            drop="first",  # Avoid multicollinearity
+            sparse_output=False,    # Return dense array
+            handle_unknown="ignore",# Safe on unseen categories
+            drop="first",           # Avoid multicollinearity
         )
 
     def process_data(self) -> None:
         """
         Execute the full data processing pipeline.
 
-        This method orchestrates the cleaning, imputation, encoding,
+        This method orWchestrates the cleaning, imputation, encoding,
         standardisation, and saving of the processed dataset.
         """
         features, labels = self._clean_data()

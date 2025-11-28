@@ -26,6 +26,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+
 @hydra.main(version_base=None, config_path="./configs", config_name="main")
 def main(cfg: DictConfig):
     """

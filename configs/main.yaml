@@ -3,6 +3,10 @@ defaults:
 
 dataset: # specify dataset name without extension
 
+labels:
+  - non-conductive
+  - conductive
+
 process_data:
   input_path: /data/${dataset}.csv
   output_dir: /data/${dataset}_processed.csv
