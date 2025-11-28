@@ -1,7 +1,7 @@
 """
 Process a raw CSV dataset through cleaning, imputation, encoding, standardisation, and saving.
 
-This module defines the ``DataProcessor`` class, which performs a complete
+This module defines the ``DataPreprocessor`` class, which performs a complete
 pre-processing pipeline on tabular data containing a ``label`` column.  The
 pipeline imputes missing feature values with an iterative imputer backed by a
 Bayesian Ridge regression model, one-hot encodes the label, standardises numeric
@@ -27,11 +27,11 @@ logging.basicConfig(
 )
 
 
-class DataProcessor:
+class DataPreprocessor:
     """
     Handle the full data-pre-processing pipeline for a CSV file.
 
-    The class loads a CSV file, processes the target ``label`` column,
+    The class loads a CSV file, preprocesses the target ``label`` column,
     imputes missing feature values, encodes the label, standardises numeric
     columns, and reassembles the dataset.
 
@@ -51,7 +51,7 @@ class DataProcessor:
 
     def __init__(self, data_path: Path) -> None:
         """
-        Initialise the processor with a CSV file path and configure transformers.
+        Initialise the preprocessor with a CSV file path and configure transformers.
 
         Parameters
         ----------
@@ -87,12 +87,12 @@ class DataProcessor:
             drop="first",           # Avoid multicollinearity
         )
 
-    def process_data(self) -> None:
+    def preprocess_data(self, output_path: Path) -> None:
         """
-        Execute the full data processing pipeline.
+        Execute the full data preprocessing pipeline.
 
-        This method orWchestrates the cleaning, imputation, encoding,
-        standardisation, and saving of the processed dataset.
+        This method orchestrates the cleaning, imputation, encoding,
+        standardisation, and saving of the preprocessed dataset.
         """
         features, labels = self._clean_data()
         scaled_features = self._scale_data(features)
@@ -101,7 +101,7 @@ class DataProcessor:
         )
         self._save_data(
             combined_data=combined_data,
-            output_path=Path(f"{self.base_name}_processed.csv"),
+            output_path=output_path,
         )
 
     def _clean_data(self) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -122,7 +122,7 @@ class DataProcessor:
             encoded_labels: pd.DataFrame
             One-hot encoded label columns with index matching the input data.
         """
-        logging.info("Starting data cleaning process...")
+        logging.info("Starting data cleaning preprocess...")
         # Preserve original order after transforms
         original_index = self.data.index.copy()
 
@@ -167,7 +167,7 @@ class DataProcessor:
         ``StandardScaler`` to have zero mean and unit variance, and
         persist the fitted scaler.
         """
-        logging.info("Starting data standardisation process...")
+        logging.info("Starting data standardisation preprocess...")
         # Select only numeric types to avoid scaling one-hot columns
         features = features.copy()
         numeric_cols = features.select_dtypes(include=[np.number]).columns
@@ -185,7 +185,7 @@ class DataProcessor:
     ) -> pd.DataFrame:
         """
         This method combines the imputed and standardised features with the one-hot
-        encoded labels to return the full processed dataset.
+        encoded labels to return the full preprocessed dataset.
 
         Parameters
         ----------
@@ -213,18 +213,18 @@ class DataProcessor:
         output_path: Path,
     ) -> None:
         """
-        Saves the processed dataset (features and labels) to a CSV
+        Saves the preprocessed dataset (features and labels) to a CSV
         file at the specified output path.
 
         Parameters
         ----------
         combined_data: pd.DataFrame
-            Fully processed dataset combining features and labels.
+            Fully preprocessed dataset combining features and labels.
         output_path : Path
             Destination path for the processed CSV file.
         """
         output_file_path = BASE_DIR / output_path
-        logging.info("Saving processed data to %s...", output_file_path)
+        logging.info("Saving preprocessed data to %s...", output_file_path)
         combined_data.to_csv(output_file_path, index=False)
         logging.info("Data saved successfully.")
 
@@ -248,10 +248,3 @@ class DataProcessor:
         except (FileNotFoundError, PermissionError, IOError) as e:
             logging.error("Failed to save model: %s", e)
             raise
-
-
-if __name__ == "__main__":
-    logging.info("Initialising Data Processor.")
-    processor = DataProcessor(data_path=Path(BASE_DIR / "data/dataset_1.csv").resolve())
-    processor.process_data()
-    logging.info("Data processing completed successfully.")

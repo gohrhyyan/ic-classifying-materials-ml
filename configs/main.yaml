@@ -1,20 +1,14 @@
 defaults:
   - _self_
 
-dataset: # specify dataset name without extension
-
-labels:
-  - non-conductive
-  - conductive
-
-process_data:
-  input_path: /data/${dataset}.csv
-  output_dir: /data/${dataset}_processed.csv
-
+dataset: null # specify dataset name without extension
 
 paths:
-  raw:          data/${dataset}.csv
-  processed:    data/${dataset}_processed.csv
-  train_split:  data/${dataset}_processed_train_data.csv
-  test_split:   data/${dataset}_processed_test_data.csv
-  outputs:      outputs/${dataset}
+  data_dir: data
+  outputs:  outputs/${dataset}
+
+suffix:
+  raw:          .csv
+  preprocessed: _preprocessed.csv
+  train:        _preprocessed_train.csv
+  test:         _preprocessed_test.csv

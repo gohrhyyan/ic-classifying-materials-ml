@@ -18,7 +18,7 @@ from omegaconf import DictConfig
 import hydra
 import logging
 
-from src.process_data import DataProcessor
+from src.preprocess_data import DataPreprocessor
 from src.data_splitter import DataSplitter
 from src.rfecv_dataset_1 import RFECVDataset1
 
@@ -36,7 +36,7 @@ def main(cfg: DictConfig):
     ---------
         cfg: Hydra configuration object containing:
             - dataset: Name of the dataset ("dataset_1" or "dataset_2")
-            - paths: Dictionary of relative paths (raw, processed, outputs, etc.)
+            - paths: Dictionary of relative paths (raw, preprocessed, outputs, etc.)
 
     Raises
     ------
@@ -46,39 +46,38 @@ def main(cfg: DictConfig):
     if cfg.dataset is None:
         raise ValueError("Dataset name must be specified in the configuration.")
 
-    BASE_DIR = Path(__file__).parent.resolve()
+    base_dir = Path(__file__).parent.resolve()
+    data_dir = base_dir / cfg.paths.data_dir
+    raw_data_path          = data_dir / f"{cfg.dataset}{cfg.suffix.raw}"
+    preprocessed_data_path = data_dir / f"{cfg.dataset}{cfg.suffix.preprocessed}"
+    train_data_path        = data_dir / f"{cfg.dataset}{cfg.suffix.train}"
+    test_data_path         = data_dir / f"{cfg.dataset}{cfg.suffix.test}"
+    output_dir             = base_dir / cfg.paths.outputs
+    
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # ------------------------------------------------------------------
     # 1. Load & preprocess raw data (common to both datasets)
     # ------------------------------------------------------------------
-
-    raw_data_path = Path(BASE_DIR / cfg.paths.raw)
-    processor = DataProcessor(data_path=raw_data_path)
-    processor.process_data()
+    DataPreprocessor(data_path=raw_data_path).preprocess_data(output_path=preprocessed_data_path)
 
     # ------------------------------------------------------------------
     # 2. Train / test split (common to both datasets)
     # ------------------------------------------------------------------
-    
-    processed_data_path = Path(BASE_DIR / cfg.paths.processed)
-    splitter = DataSplitter(data_path=processed_data_path)
-    splitter.split_data()
+    DataSplitter(data_path=preprocessed_data_path).split_data(
+        train_output_path=train_data_path,
+        test_output_path=test_data_path,
+    )
 
     # ------------------------------------------------------------------
     # 3. Dataset-specific analysis
     # ------------------------------------------------------------------
     
     if cfg.dataset == "dataset_1":
-        train_data_path = Path(BASE_DIR / cfg.paths.train_split)
-        test_data_path = Path(BASE_DIR / cfg.paths.test_split)
-        output_path = Path(BASE_DIR / cfg.paths.outputs)
-
-        output_path.mkdir(parents=True, exist_ok=True)
-
         rfecv = RFECVDataset1(
             train_data_path=train_data_path,
             test_data_path=test_data_path,
-            output_path=output_path,
+            output_path=output_dir,
         )
         rfecv.run_rfecv()
         rfecv.plot_accuracy_vs_features()

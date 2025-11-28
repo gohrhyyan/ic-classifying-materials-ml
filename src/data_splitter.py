@@ -19,7 +19,6 @@ logging.basicConfig(
 # Define BASE_DIR as the project's root: Go up two parent directories from this script's location
 BASE_DIR = Path(__file__).parent.parent
 
-
 class DataSplitter:
     """
     Load a processed dataset, split it into train/test sets, and persist the splits.
@@ -69,7 +68,7 @@ class DataSplitter:
         self.test_size = test_size
         self.random_state = random_state
 
-    def split_data(self) -> None:
+    def split_data(self, train_output_path: Path, test_output_path: Path) -> None:
         """
         Perform a stratified train-test split and save the resulting datasets.
 
@@ -90,7 +89,7 @@ class DataSplitter:
             X_features, Y_labels, test_size=self.test_size, random_state=self.random_state, stratify=Y_labels
         )
 
-        self._save_data(X_features_train, X_features_test, Y_labels_train, Y_labels_test)
+        self._save_data(X_features_train, X_features_test, Y_labels_train, Y_labels_test, train_output_path, test_output_path)
 
     def _seperate_features_and_labels(self) -> tuple[pd.DataFrame, pd.Series]:
         """
@@ -132,6 +131,8 @@ class DataSplitter:
         X_features_test: pd.DataFrame,
         Y_labels_train: pd.DataFrame,
         Y_labels_test: pd.DataFrame,
+        train_output_path: Path,
+        test_output_path: Path,
     ) -> None:
         """
         Concatenate features and labels for train/test sets and save them to CSV.
@@ -155,19 +156,12 @@ class DataSplitter:
         logging.info("Test data shape: %s", test_df.shape)
 
         train_path = Path(
-            BASE_DIR / f"data/{self.dataset_name}_train_data.csv"
+            train_output_path
         ).resolve()
-        test_path = Path(BASE_DIR / f"data/{self.dataset_name}_test_data.csv").resolve()
+        test_path = Path(test_output_path).resolve()
 
         train_df.to_csv(train_path, index=False)
         test_df.to_csv(test_path, index=False)
 
         logging.info("Train data saved to %s", train_path)
         logging.info("Test data saved to %s", test_path)
-
-
-if __name__ == "__main__":
-    logging.info("Starting data splitting process...")
-    data_module = DataSplitter(data_path=Path(BASE_DIR / "data/dataset_1_processed.csv").resolve()) #magic path being used here
-    data_module.split_data()
-    logging.info("Data splitting completed successfully.")
