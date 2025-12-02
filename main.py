@@ -53,13 +53,14 @@ def main(cfg: DictConfig):
     train_data_path        = data_dir / f"{cfg.dataset}{cfg.suffix.train}"
     test_data_path         = data_dir / f"{cfg.dataset}{cfg.suffix.test}"
     output_dir             = base_dir / cfg.paths.outputs
+    string_labels = cfg.dataset_1_labels if cfg.dataset == "dataset_1" else None #imports conductive or non-conductive labels as a list[str] from config file
     
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # ------------------------------------------------------------------
     # 1. Load & preprocess raw data (common to both datasets)
     # ------------------------------------------------------------------
-    DataPreprocessor(data_path=raw_data_path).preprocess_data(output_path=preprocessed_data_path)
+    DataPreprocessor(data_path=raw_data_path, string_labels=string_labels).preprocess_data(output_path=preprocessed_data_path)
 
     # ------------------------------------------------------------------
     # 2. Train / test split (common to both datasets)

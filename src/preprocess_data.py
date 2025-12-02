@@ -49,7 +49,7 @@ class DataPreprocessor:
         Configured one-hot encoder for the label.
     """
 
-    def __init__(self, data_path: Path) -> None:
+    def __init__(self, data_path: Path, string_labels: list[str] | None = None) -> None:
         """
         Initialise the preprocessor with a CSV file path and configure transformers.
 
@@ -58,6 +58,9 @@ class DataPreprocessor:
         data_path : Path
             Path to the input CSV file.  The file must contain a column named
             ``label`` that will be treated as the target variable.
+        string_labels : list[str] | None
+            Optional list of string labels for the target variable. If provided,
+            this list will be used to configure the OneHotEncoder categories.
         """
         self.base_name = data_path.with_suffix("")  # Remove file extension to get base path for outputs
         self.dataset_name = data_path.stem          # Extract dataset name from file stem
@@ -82,9 +85,12 @@ class DataPreprocessor:
 
         # OneHotEncoder to convert categorical labels into binary columns, let the encoder handle unknown categories safely
         self.encoder = OneHotEncoder(
-            sparse_output=False,    # Return dense array
-            handle_unknown="ignore",# Safe on unseen categories
-            drop="first",           # Avoid multicollinearity
+                        categories=[string_labels]
+            if string_labels is not None
+            else "auto",  # Handle known categories if applicable
+            sparse_output=False,  # Return dense array
+            handle_unknown="ignore",  # Safe on unseen categories
+            drop="first",  # Avoid multicollinearity
         )
 
     def preprocess_data(self, output_path: Path) -> None:

@@ -3,6 +3,10 @@ defaults:
 
 dataset: null # specify dataset name without extension
 
+dataset_1_labels:
+  - non-conductive
+  - conductive
+
 paths:
   data_dir: data
   outputs:  outputs/${dataset}
