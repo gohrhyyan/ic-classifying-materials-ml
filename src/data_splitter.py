@@ -168,7 +168,7 @@ class DataSplitter:
             test_output_path,
         )
 
-    def _separate_features_and_labels(self) -> tuple[pd.DataFrame, pd.Series]:
+    def _separate_features_and_labels(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Separate feature columns from label columns.
 
