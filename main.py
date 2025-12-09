@@ -53,13 +53,14 @@ def main(cfg: DictConfig):
     train_data_path        = data_dir / f"{cfg.dataset}{cfg.suffix.train}"
     test_data_path         = data_dir / f"{cfg.dataset}{cfg.suffix.test}"
     output_dir             = base_dir / cfg.paths.outputs
+    string_labels = cfg.dataset_1_labels if cfg.dataset == "dataset_1" else None #imports conductive or non-conductive labels as a list[str] from config file
     
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # ------------------------------------------------------------------
     # 1. Load & preprocess raw data (common to both datasets)
     # ------------------------------------------------------------------
-    DataPreprocessor(data_path=raw_data_path).preprocess_data(output_path=preprocessed_data_path)
+    DataPreprocessor(data_path=raw_data_path, string_labels=string_labels).preprocess_data(output_path=preprocessed_data_path)
 
     # ------------------------------------------------------------------
     # 2. Train / test split (common to both datasets)
@@ -87,7 +88,16 @@ def main(cfg: DictConfig):
     elif cfg.dataset == "dataset_2":
         logging.info("Dataset 2 not yet implemented.") # Placeholder
         pass
-    
+
+        """
+         3) **For Dataset 2***, you are only given the values of 8 features measured for a new compound, and a label for classification. In this case, the client simply wants you to build an algorithm with the best possible classification accuracy. Additionally, the client wants to understand what is the **smallest number of datapoints required to obtain a classifier with 70% accuracy, if it is at all possible**.
+            To answer these questions, you will need to consider data analysis and preparation, then decide which classifier to train, evaluate their performance, and visualize the results.
+            >    - A very short (<<500 words) written report providing your recommendation to the client
+            >    - Confusion matrices for each classifier you tested, with a note on any interesting observations or difficulties encountered, and why you think a given classifier worked best, if there is any.
+            >    - A comparison plot showing accuracy of different classifiers tested
+            >    - A learning curve plot (accuracy vs. training set size). **Use this plot to answer the client question.**
+                """
+        
     else:
         raise ValueError("Unsupported dataset: %s" % cfg.dataset)
     

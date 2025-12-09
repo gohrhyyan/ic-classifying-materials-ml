@@ -100,7 +100,7 @@ class RFECVDataset1:
         train_data = pd.read_csv(self.train_data_path)
         train_data = train_data.copy()
         X_train = train_data.drop(columns=["label"])
-        y_train = train_data["label"].values.ravel()  # Ensure y is 1D array
+        y_train = train_data["label"].to_numpy().ravel()  # Ensure y is 1D ndarray
 
         estimator = RandomForestClassifier(
             random_state=self.random_state, n_estimators=self.n_estimators, n_jobs=-1
