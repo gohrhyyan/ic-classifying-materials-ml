@@ -12,11 +12,13 @@ features, feature importances, and confusion matrix on the held-out test set).
 """
 import joblib
 import logging
+import numpy as np
 import pandas as pd
 from pathlib import Path
 from sklearn.model_selection import StratifiedKFold
 from sklearn.feature_selection import RFECV
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 
 logging.basicConfig(
@@ -202,18 +204,69 @@ class RFECVDataset1:
         output directory.
         """
 
+        logging.info("Generating feature importance plot...")
+
+        optimal_k_features = self.rfecv.cv_results_
+
+        importances = self.rfecv.estimator_.feature_importances_
+        importances = np.argsort(importances)
+
+        plt.figure(figsize=(10, 8))
+        plt.bar(
+            range(len(importances)),
+            color="b",
+        )
+        plt.xticks(
+            range(len(importances)),
+            [optimal_k_features[i] for i in importances]
+        )
+        
+        plt.xlabel("Importance")
+        plt.savefig(f"{self.output_path}/rfecv_feature_importance.png")
+        plt.savefig(f"{self.output_path}/rfecv_feature_importance.svg")
+        logging.info(
+            "Feature importance plot saved to %s/rfecv_feature_importance.png", self.output_path
+        )
+
     def plot_confusion_matrix(self) -> None:
         """ 
         Generate and save a confusion matrix on the held-out test set using optimal features.
 
         The matrix uses class labels 'Non-conductive' and 'Conductive'.
         Saved as PNG and SVG in the output directory.
-        """
+        """        
 
+        logging.info("Generating confusion matrix on test data...")
+
+        test_data = pd.read_csv(self.test_data_path)
+        test_data = test_data.copy()
+
+        X_test = test_data.drop(columns=["label"])
+        y_test = test_data["label"].to_numpy().ravel()
+
+        predictions = self.rfecv.predict(X_test)
+
+        cm = ConfusionMatrixDisplay.from_predictions(
+            y_test,
+            predictions,
+            display_labels = ["Non-conductive", "Conductive"],
+            cmap="plasma",
+            normalize=None,
+        )
+
+        cm.plot()
+
+        # Save
+        plt.savefig(f"{self.output_path}/rfecv_confusion_matrix.png")
+        plt.savefig(f"{self.output_path}/rfecv_confusion_matrix.svg")
+        logging.info(
+            "Confusion matrix saved to %s/rfecv_confusion_matrix.png", 
+            self.output_path
+        )
 
 if __name__ == "__main__":
-    train_data_path = BASE_DIR / "data" / "dataset_1_processed_train_data.csv"
-    test_data_path = BASE_DIR / "data" / "dataset_1_processed_test_data.csv"
+    train_data_path = BASE_DIR / "data" / "dataset_1_preprocessed_train.csv"
+    test_data_path = BASE_DIR / "data" / "dataset_1_preprocessed_test.csv"
     output_path = BASE_DIR / "outputs"
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -224,5 +277,5 @@ if __name__ == "__main__":
     )
     rfecv_processor.run_rfecv()
     rfecv_processor.plot_accuracy_vs_features()
-    # rfecv_processor.plot_feature_importance()
-    # rfecv_processor.plot_confusion_matrix()
+    rfecv_processor.plot_feature_importance()
+    rfecv_processor.plot_confusion_matrix()
