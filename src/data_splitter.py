@@ -22,7 +22,6 @@ from sklearn.preprocessing import StandardScaler
 # Define BASE_DIR as the project's root: Go up two parent directories from this script's location
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 class DataSplitter:
     """
     Load a processed dataset, split it into train/test sets,

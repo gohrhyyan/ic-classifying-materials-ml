@@ -5,11 +5,9 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, learning_c
 from pathlib import Path
 import matplotlib.pyplot as plt
 import logging
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 #todo: add logging, robustness if results don't hit 70% at all.
-#todo: plot confusion matrix for best model on test set.
-#todo: plot comparison of all models' overall accuracies as bar chart.
-
 class HandlerDataset2:
     """
     Dataset 2 processor: Compare classifiers, pick best, plot learning curve,
@@ -52,34 +50,68 @@ class HandlerDataset2:
             module = importlib.import_module(f"sklearn.{mod_name}")     # Import the module dynamically, e.g., sklearn.linear_model, returning the module object.
             cls = getattr(module, cls_name)                             # Get the class from the module (e.g., LogisticRegression), returning the class object.
             self.models[cls_name] = cls(**classifier["params"])         # Instantiate the model instance with provided params and store in the models dict. 
-
         
+        # Initialize attributes to be populated during analysis.
+        self.best_name = None
+        self.best_model = None
+        self.mean_model_accuracy_results = {}
+        self.min_size = None
+        self.min_acc = None
+        self.lc_data = None
 
-    def run_analysis(self, target: float = 0.70, sizes: int = 10):
+    def compare_classifiers(self):
         """
-        Execute the full analysis pipeline:
-        1. Compare all classifiers using cross-validated accuracy on full training set.
-        2. Select the best-performing model.
-        3. Generate and plot a learning curve for the best model across subsampled training sizes.
-        4. Identify the minimal training size achieving at least the target accuracy.
-        5. Save the plot and a results summary CSV.
-        
-        Args:
-            target (float): Target cross-validation accuracy threshold (default 0.70).
-            sizes (int): Number of points in the learning curve (default 10, evenly spaced from 10% to 100%).
+        Compare all classifiers using cross-validated accuracy on the full training set.
+        Stores mean accuracies in self.mean_model_accuracy_results.
         """
-
-        # Step 1: Compare classifiers using cross-validated accuracy.
-        results = {}                                                                                                         # Dictionary to hold {model_name: mean_cv_accuracy}.
-        
         for name, model in self.models.items(): 
             mean_model_accuracy = cross_val_score(model, self.X_train, self.y_train, cv=self.cv, scoring="accuracy").mean()  # train and test each model n times (n = number of folds), cycling through, with each fold being used as the test set once. Compute mean accuracy across folds.
-            results[name] = mean_model_accuracy                                                                              # Store the mean accuracy for this model.
+            self.mean_model_accuracy_results[name] = mean_model_accuracy                                                     # Store the mean accuracy for this model.
+        
+        self.best_name = max(self.mean_model_accuracy_results, key=self.mean_model_accuracy_results.get)                          # Select the model with the highest mean CV accuracy.
+        self.best_model = self.models[self.best_name]                                                                                 # Retrieve the corresponding model instance.
 
-        # Step 2: Select the best-performing model based on mean CV accuracy.
-        best_name = max(results, key=results.get)                                                                            # Select the model with the highest mean CV accuracy.
-        best_model = self.models[best_name]                                                                                  # Retrieve the corresponding model instance.
-    
+    def plot_classifier_comparison(self):
+        """Bar chart of all models + confusion matrices on the held-out test set."""
+        plt.figure(figsize=(12, 5 + len(self.models) * 3))
+
+        # ---- Bar chart (top) ----
+        plt.subplot(len(self.models) + 1, 1, 1)
+        names = list(self.mean_model_accuracy_results.keys())
+        accs = list(self.mean_model_accuracy_results.values())
+        bars = plt.bar(names, accs, color=["steelblue"]*len(names))
+        # highlight best model
+        best_idx = names.index(self.best_name)
+        bars[best_idx].set_color("orange")
+        plt.ylim(0, 1)
+        plt.ylabel("Mean CV Accuracy")
+        plt.title("Classifier Comparison (5-fold CV)")
+        for i, v in enumerate(accs):
+            plt.text(i, v + 0.02, f"{v:.3f}", ha="center")
+
+        # ---- Confusion matrices (one per model, trained on full train set) ----
+        for idx, (name, model) in enumerate(self.models.items(), start=2):
+            plt.subplot(len(self.models) + 1, 1, idx)
+            model.fit(self.X_train, self.y_train)
+            y_pred = model.predict(self.X_test)
+            cm = confusion_matrix(self.y_test, y_pred)
+            ConfusionMatrixDisplay(cm, display_labels=np.unique(self.y_train)).plot(
+                ax=plt.gca(), cmap="Blues", values_format="d")
+            acc_test = (y_pred == self.y_test).mean()
+            plt.title(f"{name} – Test acc {acc_test:.3f}")
+
+        plt.tight_layout()
+        plt.savefig(self.output_path / "classifier_comparison.png", dpi=200)
+        plt.close()
+
+    def compute_learning_curve(self, target: float = 0.70):
+        """
+        Generate learning curve for the best model and identify minimal training size
+        achieving at least the target accuracy.
+        
+        Args:
+            target (float): Target cross-validation accuracy threshold.
+        """
         # Step 3: Generate learning curve for the best model.
         max_train_size = len(self.X_train) - (len(self.X_train) // self.cv.n_splits) # find the maximum training size for learning curve
 
@@ -98,14 +130,13 @@ class HandlerDataset2:
         #   - This is repeated independently for all 5 folds, so 5 scores per size
         # returns: train_sizes_abs: 1D array of training sizes used, train_scores: 2D array (n_sizes x n_folds) of accuracy based on training data, cv_scores: 2D array (n_sizes x n_folds) of accuracy based on validation data. 
         train_sizes_abs, train_scores, cv_scores = learning_curve(
-            best_model, self.X_train, self.y_train,
+            self.best_model, self.X_train, self.y_train,
             cv=self.cv, train_sizes=np.arange(1, max_train_size+1, 1),
             scoring="accuracy", n_jobs=-1, random_state=self.random_state
         )
 
         # Step 4: Identify minimal training size achieving at least the target accuracy.
         # Compute mean, min CV scores across folds for each training size.
-
         # For pessimistic estimate, we'll use the minimum accuracy across folds, ensuring all folds meet the target for a given size.
         cv_mins = np.min(cv_scores, axis=1)                      # Minimum CV accuracy across folds for each training size.
         cv_above_target = cv_mins >= target                      # returns boolean array: True if the lowest score among folds for that size >= 0.70
@@ -117,31 +148,37 @@ class HandlerDataset2:
             # [::-1] reverses the cumulative min array back to original order, so we can find the first index where all subsequent sizes meet the target.
             # np.argmax finds the index of the first occurrence of the maximum value (True) in the cumulative min array. This index corresponds to the smallest training size from which all larger sizes meet the target accuracy across all folds.
         stable_from_idx = np.argmax(np.minimum.accumulate((cv_above_target)[::-1])[::-1])  # Find the first index where all subsequent sizes meet the target accuracy across all folds.
-        min_size = train_sizes_abs[stable_from_idx]
-        min_acc = cv_mins[stable_from_idx]              
-        
+
+        self.min_size = train_sizes_abs[stable_from_idx]
+        self.min_acc = cv_mins[stable_from_idx]
+        self.lc_data = {
+            "train_sizes_abs": train_sizes_abs,
+            "train_means": np.mean(train_scores, axis=1),
+            "cv_mins": cv_mins
+        }
         # Print the minimal size result.
-        print(f"Min size for >= {target}: {min_size} samples ({min_acc:.3f} acc)")
+        logging.info(f"Min size for >= {target}: {self.min_size} samples ({self.min_acc:.3f} acc)")
 
-        # Create a new figure for the learning curve plot with specified size.
-        plt.figure(figsize=(8, 5))
-        plt.plot(train_sizes_abs, np.mean(train_scores, axis=1), "o-", label="Train")  #Plot training accuracy curve: Mean across folds, with markers and line.
-        plt.plot(train_sizes_abs, cv_mins, "o-", label="CV", linewidth=2)             # Plot CV accuracy curve: Emphasized with thicker line.
-        plt.axhline(target, color="r", linestyle="--", label="Target")             # Add horizontal dashed line for the target accuracy.
-        plt.axvline(min_size, color="g", linestyle=":", label=f"Min: {min_size}")  # Add vertical dotted line at the minimal size.
-        plt.xlabel("Training Size")
-        plt.ylabel("Accuracy")
-        plt.title(f"{best_name} Learning Curve")
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.savefig(self.output_path / f"{best_name}_curve.png", dpi=150)
+    def plot_learning_curve(self, target: float = 0.70):
+            """Plot learning curve of the best model with min-size annotation."""
+            if not hasattr(self, "lc_data"):
+                print("Learning curve data not computed yet.")
+                return
 
-        # Create a summary DataFrame for results.
-        # Note: full_acc list comprehension assumes order matches self.models keys.
-        results_df = pd.DataFrame({
-            "full_acc": [results.get(k, 0) for k in self.models],  # CV accuracies for all models.
-            "best_min_size": min_size,  # Single value repeated for each row (could be scalar, but DataFrame broadcasts).
-            "best_min_acc": min_acc    # Similarly for min accuracy.
-        }, index=list(self.models.keys()))  # Use model names as row index.
-        results_df.to_csv(self.output_path / "results.csv") # Save the DataFrame to CSV in the output directory.
-        print(f"\nSaved plot & results.csv to {self.output_path}") # Confirm saving in console.
+            data = self.lc_data
+            plt.figure(figsize=(10, 6))
+            plt.plot(data["train_sizes_abs"], data["train_means"], "o-", label="Train")
+            plt.plot(data["train_sizes_abs"], data["cv_mins"], "o-", label="CV (worst fold)", linewidth=2.5)
+
+            plt.axhline(target, color="r", linestyle="--", label=f"Target {target:.0%}")
+            if self.min_size is not None:
+                plt.axvline(self.min_size, color="g", linestyle=":", linewidth=2,
+                            label=f"Stable ≥{target:.0%}: {self.min_size}")
+
+            plt.xlabel("Training Size")
+            plt.ylabel("Accuracy")
+            plt.title(f"{self.best_name} – Learning Curve")
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.savefig(self.output_path / f"{self.best_name}_learning_curve.png", dpi=200)
+            plt.close()

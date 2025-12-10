@@ -22,6 +22,7 @@ from src.preprocess_data import DataPreprocessor
 from src.data_splitter import DataSplitter
 from src.rfecv_dataset_1 import RFECVDataset1
 from src.handler_dataset_2 import HandlerDataset2
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -110,7 +111,11 @@ def main(cfg: DictConfig):
             classifiers=task_2_classifiers,
             random_state=cfg.random_seed
         )
-        handler.run_analysis(target=0.70, sizes=10)
+        handler.compare_classifiers()
+        handler.plot_classifier_comparison()
+        handler.compute_learning_curve(target=0.7)
+        handler.plot_learning_curve()
+
         
     else:
         raise ValueError("Unsupported dataset: %s" % cfg.dataset)
