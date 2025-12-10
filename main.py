@@ -21,7 +21,7 @@ import logging
 from src.preprocess_data import DataPreprocessor
 from src.data_splitter import DataSplitter
 from src.rfecv_dataset_1 import RFECVDataset1
-
+from src.handler_dataset_2 import HandlerDataset2
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -56,6 +56,22 @@ def main(cfg: DictConfig):
     string_labels = cfg.dataset_1_labels if cfg.dataset == "dataset_1" else None #imports conductive or non-conductive labels as a list[str] from config file
     
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Configuration for classifiers: A list of dictionaries, each defining a classifier's type (sklearn module.class path), and hyperparameters.
+    task_2_classifiers = [
+        # Logistic Regression: A linear for binary/multi-class classification.
+        # Params: random_state for reproducibility, max_iter to prevent convergence warnings.
+        {"type": "linear_model.LogisticRegression", "params": {"random_state": cfg.random_seed, "max_iter": 200}},
+        # Support Vector Classifier with RBF kernel: Non-linear boundary for complex data.
+        # Params: RBF kernel for non-linearity, C=1.0 for regularization strength, random_state for reproducibility.
+        {"type": "svm.SVC", "params": {"kernel": "rbf", "C": 1.0, "random_state": cfg.random_seed}},
+        # Random Forest: Ensemble of decision trees for robust, low-variance predictions.
+        # Params: 100 trees for ensemble size, random_state for reproducibility.
+        {"type": "ensemble.RandomForestClassifier", "params": {"n_estimators": 100, "random_state": cfg.random_seed}},
+        # K-Nearest Neighbors: Instance-based learning using distance metrics.
+        # Params: 5 nearest neighbors for local averaging.
+        {"type": "neighbors.KNeighborsClassifier", "params": {"n_neighbors": 5}}
+    ]
     
     # ------------------------------------------------------------------
     # 1. Load & preprocess raw data (common to both datasets)
@@ -73,12 +89,12 @@ def main(cfg: DictConfig):
     # ------------------------------------------------------------------
     # 3. Dataset-specific analysis
     # ------------------------------------------------------------------
-    
     if cfg.dataset == "dataset_1":
         rfecv = RFECVDataset1(
             train_data_path=train_data_path,
             test_data_path=test_data_path,
             output_path=output_dir,
+            random_state=cfg.random_seed
         )
         rfecv.run_rfecv()
         rfecv.plot_accuracy_vs_features()
@@ -86,17 +102,15 @@ def main(cfg: DictConfig):
         rfecv.plot_confusion_matrix()
         
     elif cfg.dataset == "dataset_2":
-        logging.info("Dataset 2 not yet implemented.") # Placeholder
-        pass
 
-        """
-         3) **For Dataset 2***, you are only given the values of 8 features measured for a new compound, and a label for classification. In this case, the client simply wants you to build an algorithm with the best possible classification accuracy. Additionally, the client wants to understand what is the **smallest number of datapoints required to obtain a classifier with 70% accuracy, if it is at all possible**.
-            To answer these questions, you will need to consider data analysis and preparation, then decide which classifier to train, evaluate their performance, and visualize the results.
-            >    - A very short (<<500 words) written report providing your recommendation to the client
-            >    - Confusion matrices for each classifier you tested, with a note on any interesting observations or difficulties encountered, and why you think a given classifier worked best, if there is any.
-            >    - A comparison plot showing accuracy of different classifiers tested
-            >    - A learning curve plot (accuracy vs. training set size). **Use this plot to answer the client question.**
-                """
+        handler = HandlerDataset2(
+            train_path=train_data_path,
+            test_path=test_data_path,
+            output_path=output_dir,
+            classifiers=task_2_classifiers,
+            random_state=cfg.random_seed
+        )
+        handler.run(target=0.70, sizes=10)
         
     else:
         raise ValueError("Unsupported dataset: %s" % cfg.dataset)

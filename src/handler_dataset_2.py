@@ -5,23 +5,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, learning_c
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-# Configuration for classifiers: A list of dictionaries, each defining a classifier's type (sklearn module.class path), and hyperparameters.
-CLASSIFIERS = [
-    # Logistic Regression: A linear for binary/multi-class classification.
-    # Params: random_state for reproducibility, max_iter to prevent convergence warnings.
-    {"type": "linear_model.LogisticRegression", "params": {"random_state": 42, "max_iter": 200}},
-    # Support Vector Classifier with RBF kernel: Non-linear boundary for complex data.
-    # Params: RBF kernel for non-linearity, C=1.0 for regularization strength, random_state for reproducibility.
-    {"type": "svm.SVC", "params": {"kernel": "rbf", "C": 1.0, "random_state": 42}},
-    # Random Forest: Ensemble of decision trees for robust, low-variance predictions.
-    # Params: 100 trees for ensemble size, random_state for reproducibility.
-    {"type": "ensemble.RandomForestClassifier", "params": {"n_estimators": 100, "random_state": 42}},
-    # K-Nearest Neighbors: Instance-based learning using distance metrics.
-    # Params: 5 nearest neighbors for local averaging.
-    {"type": "neighbors.KNeighborsClassifier", "params": {"n_neighbors": 5}}
-]
-
-class Dataset2Processor:
+class HandlerDataset2:
     """
     Dataset 2 processor: Compare classifiers, pick best, plot learning curve,
     find min size for 70% accuracy.
@@ -30,7 +14,7 @@ class Dataset2Processor:
     identification of minimal training size for a target accuracy, and visualization/saving results.
     """
 
-    def __init__(self, train_path: Path, test_path: Path, output_path: Path):
+    def __init__(self, train_path: Path, test_path: Path, output_path: Path, classifiers: list[dict], random_state: int = 42):
         """
         Initialize the processor by loading training and test data from CSV files,
         separating features (X) and labels (y), setting up cross-validation splitter,
@@ -44,7 +28,7 @@ class Dataset2Processor:
         self.train_df = pd.read_csv(train_path)
         self.test_df = pd.read_csv(test_path)
         self.output_path = output_path
-        
+                
         self.X_train = self.train_df.drop("label", axis=1) #  Extract features (X): Drop the 'label' column from training DataFrame. Drop doesn't affect the original DataFrame, only returns a new one without the specified column.
         self.y_train = self.train_df["label"]              # Extract labels (y): The 'label' column as a Series.
         self.X_test = self.test_df.drop("label", axis=1)
@@ -57,7 +41,7 @@ class Dataset2Processor:
 
         # Create classifier instances from the config list - using importlib to load sklearn modules, allowing flexible config.
         self.models = {}  # Dictionary to hold {cls_name: model_instance} pairs.
-        for classifier in CLASSIFIERS:
+        for classifier in classifiers:
             mod_name, cls_name = classifier["type"].rsplit(".", 1)      # Split the type string into module and class names (e.g., "sklearn.linear_model.LogisticRegression").
             module = importlib.import_module(f"sklearn.{mod_name}")     # Import the module dynamically, e.g., sklearn.linear_model, returning the module object.
             cls = getattr(module, cls_name)                             # Get the class from the module (e.g., LogisticRegression), returning the class object.
@@ -65,7 +49,7 @@ class Dataset2Processor:
 
         
 
-    def run(self, target=0.70, sizes: int = 10):
+    def run(self, target: float = 0.70, sizes: int = 10):
         """
         Execute the full analysis pipeline:
         1. Compare all classifiers using cross-validated accuracy on full training set.
@@ -93,7 +77,6 @@ class Dataset2Processor:
         # Step 3: Generate learning curve for the best model.
         max_train_size = len(self.X_train) - (len(self.X_train) // self.cv.n_splits) # find the maximum training size for learning curve
 
-        # how u know this aint just vibecoded:
         # preliminary runs have revealed that the target accuracy is achieved at around ~5 to 10 samples, 70% accuracy is achieved at minimum 4 samples, 
         # but as more data is added, the accuracy fluctuates significantly due to the small dataset size, and actually dips below 70% again,
         # we'll employ a finer granularity and pessimistic approach to identify the minimal size that consistently meets the target across all folds.
@@ -102,10 +85,10 @@ class Dataset2Processor:
         # learning_curve + StratifiedKFold works as follows:
         #   - For EACH training size:
         #       - For EACH of the 5 folds:
-        #           • Take the FULL training indices of that fold (~80% of data)
-        #           • Randomly subsample 'size' samples FROM THAT FOLD'S TRAINING DATA ONLY
-        #           • Train model on those subsampled points
-        #           • Evaluate on the ENTIRE held-out validation fold (~20% of data)
+        #            Take the FULL training indices of that fold (~80% of data)
+        #            Randomly subsample 'size' samples FROM THAT FOLD'S TRAINING DATA ONLY
+        #            Train model on those subsampled points
+        #            Evaluate on the ENTIRE held-out validation fold (~20% of data)
         #   - This is repeated independently for all 5 folds, so 5 scores per size
         # returns: train_sizes_abs: 1D array of training sizes used, train_scores: 2D array (n_sizes x n_folds) of accuracy based on training data, cv_scores: 2D array (n_sizes x n_folds) of accuracy based on validation data. 
         train_sizes_abs, train_scores, cv_scores = learning_curve(
@@ -129,9 +112,9 @@ class Dataset2Processor:
             # np.argmax finds the index of the first occurrence of the maximum value (True) in the cumulative min array. This index corresponds to the smallest training size from which all larger sizes meet the target accuracy across all folds.
         stable_from_idx = np.argmax(np.minimum.accumulate((cv_above_target)[::-1])[::-1])  # Find the first index where all subsequent sizes meet the target accuracy across all folds.
         min_size = train_sizes_abs[stable_from_idx]
-
-        min_acc = cv_mins[stable_from_idx]              # Print the minimal size result.
-
+        min_acc = cv_mins[stable_from_idx]              
+        
+        # Print the minimal size result.
         print(f"Min size for >= {target}: {min_size} samples ({min_acc:.3f} acc)")
 
         # Create a new figure for the learning curve plot with specified size.
@@ -154,16 +137,37 @@ class Dataset2Processor:
             "best_min_size": min_size,  # Single value repeated for each row (could be scalar, but DataFrame broadcasts).
             "best_min_acc": min_acc    # Similarly for min accuracy.
         }, index=list(self.models.keys()))  # Use model names as row index.
-        # Save the DataFrame to CSV in the output directory.
-        results_df.to_csv(self.output_path / "results.csv")
-        # Confirm saving in console.
-        print(f"\nSaved plot & results.csv to {self.output_path}")
+        results_df.to_csv(self.output_path / "results.csv") # Save the DataFrame to CSV in the output directory.
+        print(f"\nSaved plot & results.csv to {self.output_path}") # Confirm saving in console.
+
+
+
+
+
+
+
+
 
 # Entry point for standalone script execution.
 # This block runs the processor if the script is executed directly (not imported).
 if __name__ == "__main__":
-    # Import Path if not already (redundant here but ensures availability).
-    from pathlib import Path
+    # Configuration for classifiers: A list of dictionaries, each defining a classifier's type (sklearn module.class path), and hyperparameters.
+
+    classifiers = [
+        # Logistic Regression: A linear for binary/multi-class classification.
+        # Params: random_state for reproducibility, max_iter to prevent convergence warnings.
+        {"type": "linear_model.LogisticRegression", "params": {"random_state": 42, "max_iter": 200}},
+        # Support Vector Classifier with RBF kernel: Non-linear boundary for complex data.
+        # Params: RBF kernel for non-linearity, C=1.0 for regularization strength, random_state for reproducibility.
+        {"type": "svm.SVC", "params": {"kernel": "rbf", "C": 1.0, "random_state": 42}},
+        # Random Forest: Ensemble of decision trees for robust, low-variance predictions.
+        # Params: 100 trees for ensemble size, random_state for reproducibility.
+        {"type": "ensemble.RandomForestClassifier", "params": {"n_estimators": 100, "random_state": 42}},
+        # K-Nearest Neighbors: Instance-based learning using distance metrics.
+        # Params: 5 nearest neighbors for local averaging.
+        {"type": "neighbors.KNeighborsClassifier", "params": {"n_neighbors": 5}}
+    ]
+
     # Resolve base directory: Parent of the parent of this script file (assuming structure like project/src/script.py).
     base = Path(__file__).parent.parent
     # Instantiate the processor with specific file paths:
@@ -172,7 +176,7 @@ if __name__ == "__main__":
     proc = Dataset2Processor(
         base / "data" / "dataset_2_preprocessed_train.csv",
         base / "data" / "dataset_2_preprocessed_test.csv",
-        base / "outputs" / "dataset_2"
+        base / "outputs" / "dataset_2", classifiers
     )
     # Run the analysis with default target accuracy of 70% and 10 curve points.
     proc.run(target=0.70)

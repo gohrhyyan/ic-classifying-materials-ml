@@ -16,3 +16,5 @@ suffix:
   preprocessed: _preprocessed.csv
   train:        _preprocessed_train.csv
   test:         _preprocessed_test.csv
+
+random_seed: 42
