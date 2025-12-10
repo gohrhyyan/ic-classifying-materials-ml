@@ -82,8 +82,8 @@ def main(cfg: DictConfig):
         )
         rfecv.run_rfecv()
         rfecv.plot_accuracy_vs_features()
-        # rfecv.plot_feature_importance()
-        # rfecv.plot_confusion_matrix()
+        rfecv.plot_feature_importance()
+        rfecv.plot_confusion_matrix()
         
     elif cfg.dataset == "dataset_2":
         logging.info("Dataset 2 not yet implemented.") # Placeholder

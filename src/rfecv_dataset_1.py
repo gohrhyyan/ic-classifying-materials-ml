@@ -267,6 +267,7 @@ class RFECVDataset1:
         )
 
         cm.plot()
+        plt.tight_layout()
 
         # Save
         plt.savefig(f"{self.output_path}/rfecv_confusion_matrix.png")
@@ -275,19 +276,3 @@ class RFECVDataset1:
             "Confusion matrix saved to %s/rfecv_confusion_matrix.png", 
             self.output_path
         )
-
-if __name__ == "__main__":
-    train_data_path = BASE_DIR / "data" / "dataset_1_preprocessed_train.csv"
-    test_data_path = BASE_DIR / "data" / "dataset_1_preprocessed_test.csv"
-    output_path = BASE_DIR / "outputs"
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    rfecv_processor = RFECVDataset1(
-        train_data_path=Path(train_data_path),
-        test_data_path=Path(test_data_path),
-        output_path=Path(output_path),
-    )
-    rfecv_processor.run_rfecv()
-    rfecv_processor.plot_accuracy_vs_features()
-    rfecv_processor.plot_feature_importance()
-    rfecv_processor.plot_confusion_matrix()
