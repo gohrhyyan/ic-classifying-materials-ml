@@ -110,7 +110,7 @@ def main(cfg: DictConfig):
             classifiers=task_2_classifiers,
             random_state=cfg.random_seed
         )
-        handler.run(target=0.70, sizes=10)
+        handler.run_analysis(target=0.70, sizes=10)
         
     else:
         raise ValueError("Unsupported dataset: %s" % cfg.dataset)

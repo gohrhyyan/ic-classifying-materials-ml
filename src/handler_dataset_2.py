@@ -4,6 +4,11 @@ import pandas as pd
 from sklearn.model_selection import StratifiedKFold, cross_val_score, learning_curve
 from pathlib import Path
 import matplotlib.pyplot as plt
+import logging
+
+#todo: add logging, robustness if results don't hit 70% at all.
+#todo: plot confusion matrix for best model on test set.
+#todo: plot comparison of all models' overall accuracies as bar chart.
 
 class HandlerDataset2:
     """
@@ -28,6 +33,7 @@ class HandlerDataset2:
         self.train_df = pd.read_csv(train_path)
         self.test_df = pd.read_csv(test_path)
         self.output_path = output_path
+        self.random_state = random_state
                 
         self.X_train = self.train_df.drop("label", axis=1) #  Extract features (X): Drop the 'label' column from training DataFrame. Drop doesn't affect the original DataFrame, only returns a new one without the specified column.
         self.y_train = self.train_df["label"]              # Extract labels (y): The 'label' column as a Series.
@@ -37,7 +43,7 @@ class HandlerDataset2:
         # Set up 5-fold stratified cross-validation: Splits all data into 5 "folds". Ensures each fold has roughly the same proportion of classes as the original dataset. Shuffles for randomness, random_state for reproducibility.
         # Each time we train a model, 4 folds are used for training and 1 for validation, rotating through all folds so each fold serves as validation once.
         # self.cv is a generator object that yields train/test indices for each fold.
-        self.cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        self.cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.random_state)
 
         # Create classifier instances from the config list - using importlib to load sklearn modules, allowing flexible config.
         self.models = {}  # Dictionary to hold {cls_name: model_instance} pairs.
@@ -49,7 +55,7 @@ class HandlerDataset2:
 
         
 
-    def run(self, target: float = 0.70, sizes: int = 10):
+    def run_analysis(self, target: float = 0.70, sizes: int = 10):
         """
         Execute the full analysis pipeline:
         1. Compare all classifiers using cross-validated accuracy on full training set.
@@ -94,7 +100,7 @@ class HandlerDataset2:
         train_sizes_abs, train_scores, cv_scores = learning_curve(
             best_model, self.X_train, self.y_train,
             cv=self.cv, train_sizes=np.arange(1, max_train_size+1, 1),
-            scoring="accuracy", n_jobs=-1, random_state=42
+            scoring="accuracy", n_jobs=-1, random_state=self.random_state
         )
 
         # Step 4: Identify minimal training size achieving at least the target accuracy.
@@ -139,44 +145,3 @@ class HandlerDataset2:
         }, index=list(self.models.keys()))  # Use model names as row index.
         results_df.to_csv(self.output_path / "results.csv") # Save the DataFrame to CSV in the output directory.
         print(f"\nSaved plot & results.csv to {self.output_path}") # Confirm saving in console.
-
-
-
-
-
-
-
-
-
-# Entry point for standalone script execution.
-# This block runs the processor if the script is executed directly (not imported).
-if __name__ == "__main__":
-    # Configuration for classifiers: A list of dictionaries, each defining a classifier's type (sklearn module.class path), and hyperparameters.
-
-    classifiers = [
-        # Logistic Regression: A linear for binary/multi-class classification.
-        # Params: random_state for reproducibility, max_iter to prevent convergence warnings.
-        {"type": "linear_model.LogisticRegression", "params": {"random_state": 42, "max_iter": 200}},
-        # Support Vector Classifier with RBF kernel: Non-linear boundary for complex data.
-        # Params: RBF kernel for non-linearity, C=1.0 for regularization strength, random_state for reproducibility.
-        {"type": "svm.SVC", "params": {"kernel": "rbf", "C": 1.0, "random_state": 42}},
-        # Random Forest: Ensemble of decision trees for robust, low-variance predictions.
-        # Params: 100 trees for ensemble size, random_state for reproducibility.
-        {"type": "ensemble.RandomForestClassifier", "params": {"n_estimators": 100, "random_state": 42}},
-        # K-Nearest Neighbors: Instance-based learning using distance metrics.
-        # Params: 5 nearest neighbors for local averaging.
-        {"type": "neighbors.KNeighborsClassifier", "params": {"n_neighbors": 5}}
-    ]
-
-    # Resolve base directory: Parent of the parent of this script file (assuming structure like project/src/script.py).
-    base = Path(__file__).parent.parent
-    # Instantiate the processor with specific file paths:
-    # - Train/test CSVs in a 'data' subfolder.
-    # - Outputs in an 'outputs/dataset_2' subfolder.
-    proc = Dataset2Processor(
-        base / "data" / "dataset_2_preprocessed_train.csv",
-        base / "data" / "dataset_2_preprocessed_test.csv",
-        base / "outputs" / "dataset_2", classifiers
-    )
-    # Run the analysis with default target accuracy of 70% and 10 curve points.
-    proc.run(target=0.70)
