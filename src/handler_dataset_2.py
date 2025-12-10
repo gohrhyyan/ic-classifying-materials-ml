@@ -6,8 +6,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 # Configuration for classifiers: A list of dictionaries, each defining a classifier's type (sklearn module.class path), and hyperparameters.
-# This allows easy extension or modification of models without changing core code.
-CLASSIFIERS_CONFIG = [
+CLASSIFIERS = [
     # Logistic Regression: A linear for binary/multi-class classification.
     # Params: random_state for reproducibility, max_iter to prevent convergence warnings.
     {"type": "linear_model.LogisticRegression", "params": {"random_state": 42, "max_iter": 200}},
@@ -25,7 +24,7 @@ CLASSIFIERS_CONFIG = [
 class Dataset2Processor:
     """
     Dataset 2 processor: Compare classifiers, pick best, plot learning curve,
-    find min size for 70% acc. Readable prints & basic plot.
+    find min size for 70% accuracy.
     This class encapsulates the entire workflow: data loading, model comparison via CV,
     selection of the best performer, learning curve generation to assess data efficiency,
     identification of minimal training size for a target accuracy, and visualization/saving results.
@@ -51,20 +50,18 @@ class Dataset2Processor:
         self.X_test = self.test_df.drop("label", axis=1)
         self.y_test = self.test_df["label"]
 
-        # Set up 5-fold stratified cross-validation: Ensures each fold has roughly the same proportion of classes as the original dataset. Shuffle for randomness, random_state for reproducibility.
+        # Set up 5-fold stratified cross-validation: Splits all data into 5 "folds". Ensures each fold has roughly the same proportion of classes as the original dataset. Shuffles for randomness, random_state for reproducibility.
+        # Each time we train a model, 4 folds are used for training and 1 for validation, rotating through all folds so each fold serves as validation once.
+        # self.cv is a generator object that yields train/test indices for each fold.
         self.cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
         # Create classifier instances from the config list - using importlib to load sklearn modules, allowing flexible config.
         self.models = {}  # Dictionary to hold {cls_name: model_instance} pairs.
-        for config in CLASSIFIERS_CONFIG:
-            # Split the type string into module and class names (e.g., "sklearn.linear_model.LogisticRegression").
-            mod_name, cls_name = config["type"].rsplit(".", 1)
-            # Import the module dynamically (e.g., sklearn.linear_model).
-            module = importlib.import_module(f"sklearn.{mod_name}")
-            # Get the class from the module (e.g., LogisticRegression).
-            cls = getattr(module, cls_name)
-            # Instantiate the class with provided params and store in dict.
-            self.models[cls_name] = cls(**config["params"])
+        for classifier in CLASSIFIERS:
+            mod_name, cls_name = classifier["type"].rsplit(".", 1)      # Split the type string into module and class names (e.g., "sklearn.linear_model.LogisticRegression").
+            module = importlib.import_module(f"sklearn.{mod_name}")     # Import the module dynamically, e.g., sklearn.linear_model, returning the module object.
+            cls = getattr(module, cls_name)                             # Get the class from the module (e.g., LogisticRegression), returning the class object.
+            self.models[cls_name] = cls(**classifier["params"])         # Instantiate the model instance with provided params and store in the models dict. 
 
         
 
@@ -81,50 +78,66 @@ class Dataset2Processor:
             target (float): Target cross-validation accuracy threshold (default 0.70).
             sizes (int): Number of points in the learning curve (default 10, evenly spaced from 10% to 100%).
         """
-        results = {}  # Dictionary to store {model_name: mean_cv_accuracy} for comparison.
-        for name, model in self.models.items():
-            scores = cross_val_score(model, self.X_train, self.y_train, cv=self.cv, scoring="accuracy")  # Compute 5-fold CV accuracy scores for the model on the full training set. scoring="accuracy" uses classification accuracy as the metric.
-            mean, std = scores.mean(), scores.std()                                                      # Calculate mean and standard deviation of the CV scores.
-            results[name] = mean
-            print(f"{name}: {mean:.3f} ± {std:.3f}")
 
-        best_name = max(results, key=results.get)                                                        # Select the model with the highest mean CV accuracy.
-        best_model = self.models[best_name]                                                              # Retrieve the corresponding model instance.
-        print(f"\nBest: {best_name} ({results[best_name]:.3f})")
+        # Step 1: Compare classifiers using cross-validated accuracy.
+        results = {}                                                                                                         # Dictionary to hold {model_name: mean_cv_accuracy}.
+        
+        for name, model in self.models.items(): 
+            mean_model_accuracy = cross_val_score(model, self.X_train, self.y_train, cv=self.cv, scoring="accuracy").mean()  # train and test each model n times (n = number of folds), cycling through, with each fold being used as the test set once. Compute mean accuracy across folds.
+            results[name] = mean_model_accuracy                                                                              # Store the mean accuracy for this model.
 
-        print(f"\n--- Learning Curve ---")
-        # Generate learning curve data:
-        # - Numbers of training examples that has been used to generate the learning curve.
-        # - train_scores: Training accuracy at each size (across CV folds).
-        # - cv_scores: CV accuracy at each size (across CV folds).
-        # - n_jobs=-1: use all cores for for parallel computation
-        # - random_state for reproducibility.
-        max_train_size = len(self.X_train) - (len(self.X_train) // self.cv.n_splits)
-       
+        # Step 2: Select the best-performing model based on mean CV accuracy.
+        best_name = max(results, key=results.get)                                                                            # Select the model with the highest mean CV accuracy.
+        best_model = self.models[best_name]                                                                                  # Retrieve the corresponding model instance.
+    
+        # Step 3: Generate learning curve for the best model.
+        max_train_size = len(self.X_train) - (len(self.X_train) // self.cv.n_splits) # find the maximum training size for learning curve
+
+        # how u know this aint just vibecoded:
+        # preliminary runs have revealed that the target accuracy is achieved at around ~5 to 10 samples, 70% accuracy is achieved at minimum 4 samples, 
+        # but as more data is added, the accuracy fluctuates significantly due to the small dataset size, and actually dips below 70% again,
+        # we'll employ a finer granularity and pessimistic approach to identify the minimal size that consistently meets the target across all folds.
+        # but for granularity and because the data is inherently noisy when limited, we'll use every integer training size from 1 to max_train_size (320), since the dataset is small enough.
+
+        # learning_curve + StratifiedKFold works as follows:
+        #   - For EACH training size:
+        #       - For EACH of the 5 folds:
+        #           • Take the FULL training indices of that fold (~80% of data)
+        #           • Randomly subsample 'size' samples FROM THAT FOLD'S TRAINING DATA ONLY
+        #           • Train model on those subsampled points
+        #           • Evaluate on the ENTIRE held-out validation fold (~20% of data)
+        #   - This is repeated independently for all 5 folds, so 5 scores per size
+        # returns: train_sizes_abs: 1D array of training sizes used, train_scores: 2D array (n_sizes x n_folds) of accuracy based on training data, cv_scores: 2D array (n_sizes x n_folds) of accuracy based on validation data. 
         train_sizes_abs, train_scores, cv_scores = learning_curve(
             best_model, self.X_train, self.y_train,
             cv=self.cv, train_sizes=np.arange(1, max_train_size+1, 1),
             scoring="accuracy", n_jobs=-1, random_state=42
         )
 
-        # Compute mean CV accuracy across folds for each size (ignore std for simplicity here).
-        cv_means = np.mean(cv_scores, axis=1)
+        # Step 4: Identify minimal training size achieving at least the target accuracy.
+        # Compute mean, min CV scores across folds for each training size.
 
-        # Find the smallest index where mean CV accuracy meets or exceeds the target.
-        # np.argmax returns the first True index in the boolean array (cv_means >= target).
-        min_idx = np.argmax(cv_means >= target)
-        # If no size meets the target, fall back to full dataset size.
-        # Otherwise, round down to integer sample count.
-        min_size = int(train_sizes_abs[min_idx]) if min_idx > 0 else len(self.X_train)
-        # Retrieve the accuracy at that index.
-        min_acc = cv_means[min_idx]
-        # Print the minimal size result.
+        # For pessimistic estimate, we'll use the minimum accuracy across folds, ensuring all folds meet the target for a given size.
+        cv_mins = np.min(cv_scores, axis=1)                      # Minimum CV accuracy across folds for each training size.
+        cv_above_target = cv_mins >= target                      # returns boolean array: True if the lowest score among folds for that size >= 0.70
+
+        # what's being done here:
+        # We want to find the smallest training size such that from that size onward, all subsequent sizes also meet the target accuracy across all folds.
+            # [::-1] reverses the array, looking from most data to least. i.e pass/fail resultss are being looked at from largest training size to smallest.
+            # np.minimum.accumulate computes the cumulative minimum of the reversed boolean array. This means that once we hit a False (a size that fails), all smaller sizes will also be marked as False in the cumulative min.
+            # [::-1] reverses the cumulative min array back to original order, so we can find the first index where all subsequent sizes meet the target.
+            # np.argmax finds the index of the first occurrence of the maximum value (True) in the cumulative min array. This index corresponds to the smallest training size from which all larger sizes meet the target accuracy across all folds.
+        stable_from_idx = np.argmax(np.minimum.accumulate((cv_above_target)[::-1])[::-1])  # Find the first index where all subsequent sizes meet the target accuracy across all folds.
+        min_size = train_sizes_abs[stable_from_idx]
+
+        min_acc = cv_mins[stable_from_idx]              # Print the minimal size result.
+
         print(f"Min size for >= {target}: {min_size} samples ({min_acc:.3f} acc)")
 
         # Create a new figure for the learning curve plot with specified size.
         plt.figure(figsize=(8, 5))
         plt.plot(train_sizes_abs, np.mean(train_scores, axis=1), "o-", label="Train")  #Plot training accuracy curve: Mean across folds, with markers and line.
-        plt.plot(train_sizes_abs, cv_means, "o-", label="CV", linewidth=2)             # Plot CV accuracy curve: Emphasized with thicker line.
+        plt.plot(train_sizes_abs, cv_mins, "o-", label="CV", linewidth=2)             # Plot CV accuracy curve: Emphasized with thicker line.
         plt.axhline(target, color="r", linestyle="--", label="Target")             # Add horizontal dashed line for the target accuracy.
         plt.axvline(min_size, color="g", linestyle=":", label=f"Min: {min_size}")  # Add vertical dotted line at the minimal size.
         plt.xlabel("Training Size")
@@ -133,7 +146,6 @@ class Dataset2Processor:
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.savefig(self.output_path / f"{best_name}_curve.png", dpi=150)
-        plt.show()
 
         # Create a summary DataFrame for results.
         # Note: full_acc list comprehension assumes order matches self.models keys.

@@ -46,24 +46,27 @@ class DataPreprocessor:
             Optional list of string labels for the target variable. If provided,
             this list will be used to configure the OneHotEncoder categories.
         """
-        self.base_name = data_path.with_suffix(
+        # Remove file extension to get base path for outputs 
+        self.base_name = data_path.with_suffix( 
             ""
-        )  # Remove file extension to get base path for outputs
+        )  
+
+
+        # Load dataset into pandas, automatically creating DataFrame
         self.dataset_name = data_path.stem  # Extract dataset name from file stem
         self.data = pd.read_csv(
             data_path
-        )  # Load dataset into pandas, automatically creating DataFrame
-
-        # TODO: remove magic numbers
+        )
+ 
 
         # OneHotEncoder to convert categorical labels into binary columns, let the encoder handle unknown categories safely
         self.encoder = OneHotEncoder(
             categories=[string_labels]
             if string_labels is not None
-            else "auto",  # Handle known categories if applicable
-            sparse_output=False,  # Return dense array
+            else "auto",              # Handle known categories if applicable
+            sparse_output=False,      # Return dense array
             handle_unknown="ignore",  # Safe on unseen categories
-            drop="first",  # Avoid multicollinearity
+            drop="first",             # Avoid multicollinearity
         )
 
     def preprocess_data(self, output_path: Path) -> None:
@@ -98,14 +101,15 @@ class DataPreprocessor:
             One-hot encoded label columns with index matching the input data.
         """
         logging.info("Starting data cleaning preprocess...")
+
         # Preserve original order after transforms
         original_index = self.data.index.copy()
-
         if "label" not in self.data.columns:
             logging.error("Input data must contain a 'label' column.")
             raise KeyError("Input data must contain a 'label' column.")
-
-        labels = self.data["label"].to_frame().copy()  # Keep as DataFrame for encoder
+            
+        # Keep as DataFrame for encoder
+        labels = self.data["label"].to_frame().copy()  
         features = self.data.drop(columns=["label"], axis=1).copy()
 
         logging.info("Encoding categorical variables...")
