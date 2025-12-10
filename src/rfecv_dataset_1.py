@@ -206,24 +206,36 @@ class RFECVDataset1:
 
         logging.info("Generating feature importance plot...")
 
-        optimal_k_features = self.rfecv.cv_results_
-
         importances = self.rfecv.estimator_.feature_importances_
-        importances = np.argsort(importances)
+        orig_feature_names = np.array(self.rfecv.feature_names_in_)
+        feature_names = orig_feature_names[self.rfecv.support_]
 
-        plt.figure(figsize=(10, 8))
+        indicies = np.argsort(importances)
+        sorted_importances = importances[indicies]
+        sorted_feature_names = feature_names[indicies]
+
+
+        plt.figure(figsize=(12,6))
         plt.bar(
-            range(len(importances)),
+            range(len(sorted_importances)),
+            sorted_importances,
+            align="center",
             color="b",
         )
         plt.xticks(
-            range(len(importances)),
-            [optimal_k_features[i] for i in importances]
+            range(len(sorted_importances)),
+            sorted_feature_names.astype(str).tolist(),
+            rotation=90,
         )
         
-        plt.xlabel("Importance")
+        plt.xlabel("Feature")
+        plt.ylabel("Importance")
+        plt.title("Feature Importances from RFECV-selected random forest")
+        plt.tight_layout()
+
         plt.savefig(f"{self.output_path}/rfecv_feature_importance.png")
         plt.savefig(f"{self.output_path}/rfecv_feature_importance.svg")
+
         logging.info(
             "Feature importance plot saved to %s/rfecv_feature_importance.png", self.output_path
         )
