@@ -1,32 +1,25 @@
-# Import necessary libraries for dynamic module loading, numerical operations,
-# data manipulation, scikit-learn model evaluation tools, file path handling,
-# and plotting.
 import importlib  # Used for dynamically importing scikit-learn modules at runtime.
-import numpy as np  # NumPy for numerical computations, especially array operations in learning curves.
-import pandas as pd  # Pandas for loading and handling CSV data as DataFrames.
+import numpy as np
+import pandas as pd
 from sklearn.model_selection import StratifiedKFold, cross_val_score, learning_curve
-    # StratifiedKFold: Ensures balanced class distribution in cross-validation folds.
-    # cross_val_score: Computes cross-validated scores for model evaluation.
-    # learning_curve: Generates train/test sizes and scores for learning curve analysis.
-from pathlib import Path  # Pathlib for cross-platform file path manipulation and resolution.
-import matplotlib.pyplot as plt  # Matplotlib for creating and saving the learning curve plot.
+from pathlib import Path
+import matplotlib.pyplot as plt
 
-# Configuration for classifiers: A list of dictionaries, each defining a classifier's
-# name (for reference), type (sklearn module.class path), and hyperparameters.
+# Configuration for classifiers: A list of dictionaries, each defining a classifier's type (sklearn module.class path), and hyperparameters.
 # This allows easy extension or modification of models without changing core code.
 CLASSIFIERS_CONFIG = [
-    # Logistic Regression: A linear model for binary/multi-class classification.
+    # Logistic Regression: A linear for binary/multi-class classification.
     # Params: random_state for reproducibility, max_iter to prevent convergence warnings.
-    {"name": "LR", "type": "linear_model.LogisticRegression", "params": {"random_state": 42, "max_iter": 200}},
+    {"type": "linear_model.LogisticRegression", "params": {"random_state": 42, "max_iter": 200}},
     # Support Vector Classifier with RBF kernel: Non-linear boundary for complex data.
     # Params: RBF kernel for non-linearity, C=1.0 for regularization strength, random_state for reproducibility.
-    {"name": "SVC", "type": "svm.SVC", "params": {"kernel": "rbf", "C": 1.0, "random_state": 42}},
+    {"type": "svm.SVC", "params": {"kernel": "rbf", "C": 1.0, "random_state": 42}},
     # Random Forest: Ensemble of decision trees for robust, low-variance predictions.
     # Params: 100 trees for ensemble size, random_state for reproducibility.
-    {"name": "RF", "type": "ensemble.RandomForestClassifier", "params": {"n_estimators": 100, "random_state": 42}},
+    {"type": "ensemble.RandomForestClassifier", "params": {"n_estimators": 100, "random_state": 42}},
     # K-Nearest Neighbors: Instance-based learning using distance metrics.
     # Params: 5 nearest neighbors for local averaging.
-    {"name": "KNN", "type": "neighbors.KNeighborsClassifier", "params": {"n_neighbors": 5}}
+    {"type": "neighbors.KNeighborsClassifier", "params": {"n_neighbors": 5}}
 ]
 
 class Dataset2Processor:
@@ -49,33 +42,21 @@ class Dataset2Processor:
             test_path (Path): Path to the processed test CSV file.
             output_path (Path): Directory path for saving plots and results.
         """
-        # Load training data as a Pandas DataFrame from the specified CSV file.
-        # Assumes the CSV has a 'label' column for targets and numeric features otherwise.
         self.train_df = pd.read_csv(train_path)
-        # Load test data similarly.
         self.test_df = pd.read_csv(test_path)
         self.output_path = output_path
         
-        # Extract features (X): Drop the 'label' column from training DataFrame.
-        # Assumes all other columns are numeric features.
-        self.X_train = self.train_df.drop("label", axis=1)
-        # Extract labels (y): The 'label' column as a Series.
-        self.y_train = self.train_df["label"]
-        # Similarly for test set.
+        self.X_train = self.train_df.drop("label", axis=1) #  Extract features (X): Drop the 'label' column from training DataFrame. Drop doesn't affect the original DataFrame, only returns a new one without the specified column.
+        self.y_train = self.train_df["label"]              # Extract labels (y): The 'label' column as a Series.
         self.X_test = self.test_df.drop("label", axis=1)
         self.y_test = self.test_df["label"]
 
-        # Set up 5-fold stratified cross-validation: Ensures each fold has roughly
-        # the same proportion of classes as the original dataset. Shuffle for randomness,
-        # random_state for reproducibility.
+        # Set up 5-fold stratified cross-validation: Ensures each fold has roughly the same proportion of classes as the original dataset. Shuffle for randomness, random_state for reproducibility.
         self.cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-        # Dynamically create classifier instances from the config list.
-        # This uses importlib to load sklearn modules on-the-fly, allowing flexible config.
-        self.models = {}  # Dictionary to hold {name: model_instance} pairs.
+        # Create classifier instances from the config list - using importlib to load sklearn modules, allowing flexible config.
+        self.models = {}  # Dictionary to hold {cls_name: model_instance} pairs.
         for config in CLASSIFIERS_CONFIG:
-            # Extract the model name for keying the dictionary.
-            name = config["name"]
             # Split the type string into module and class names (e.g., "sklearn.linear_model.LogisticRegression").
             mod_name, cls_name = config["type"].rsplit(".", 1)
             # Import the module dynamically (e.g., sklearn.linear_model).
@@ -83,10 +64,9 @@ class Dataset2Processor:
             # Get the class from the module (e.g., LogisticRegression).
             cls = getattr(module, cls_name)
             # Instantiate the class with provided params and store in dict.
-            self.models[name] = cls(**config["params"])
+            self.models[cls_name] = cls(**config["params"])
 
-        # Print summary of loaded dataset sizes for user feedback.
-        print(f"Loaded: {len(self.X_train)} train, {len(self.X_test)} test samples")
+        
 
     def run(self, target=0.70, sizes=10):
         """
@@ -101,10 +81,8 @@ class Dataset2Processor:
             target (float): Target cross-validation accuracy threshold (default 0.70).
             sizes (int): Number of points in the learning curve (default 10, evenly spaced from 10% to 100%).
         """
-        # Header for classifier comparison section in console output.
-        print("\n--- Classifier Comparison (Full CV Acc) ---")
         results = {}  # Dictionary to store {model_name: mean_cv_accuracy} for comparison.
-        # Iterate over each model in the dictionary.
+
         for name, model in self.models.items():
             # Compute 5-fold CV accuracy scores for the model on the full training set.
             # scoring="accuracy" uses classification accuracy as the metric.
@@ -153,27 +131,16 @@ class Dataset2Processor:
 
         # Create a new figure for the learning curve plot with specified size.
         plt.figure(figsize=(8, 5))
-        # Plot training accuracy curve: Mean across folds, with markers and line.
-        plt.plot(train_sizes, np.mean(train_scores, axis=1), "o-", label="Train")
-        # Plot CV accuracy curve: Emphasized with thicker line.
-        plt.plot(train_sizes, cv_means, "o-", label="CV", linewidth=2)
-        # Add horizontal dashed line for the target accuracy.
-        plt.axhline(target, color="r", linestyle="--", label="Target")
-        # Add vertical dotted line at the minimal size.
-        plt.axvline(min_size, color="g", linestyle=":", label=f"Min: {min_size}")
-        # Label x-axis as training set size.
+        plt.plot(train_sizes, np.mean(train_scores, axis=1), "o-", label="Train")  #Plot training accuracy curve: Mean across folds, with markers and line.
+        plt.plot(train_sizes, cv_means, "o-", label="CV", linewidth=2)             # Plot CV accuracy curve: Emphasized with thicker line.
+        plt.axhline(target, color="r", linestyle="--", label="Target")             # Add horizontal dashed line for the target accuracy.
+        plt.axvline(min_size, color="g", linestyle=":", label=f"Min: {min_size}")  # Add vertical dotted line at the minimal size.
         plt.xlabel("Training Size")
-        # Label y-axis as accuracy.
         plt.ylabel("Accuracy")
-        # Set plot title with the best model name.
         plt.title(f"{best_name} Learning Curve")
-        # Add legend to distinguish lines.
         plt.legend()
-        # Enable light grid for readability.
         plt.grid(True, alpha=0.3)
-        # Save the plot as a high-resolution PNG in the output directory.
         plt.savefig(self.output_path / f"{best_name}_curve.png", dpi=150)
-        # Display the plot interactively (if in a notebook/Jupyter; otherwise, may not show).
         plt.show()
 
         # Create a summary DataFrame for results.
